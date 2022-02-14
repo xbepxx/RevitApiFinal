@@ -21,33 +21,46 @@ namespace RevitApiFinal2
             UIDocument uidoc = uiapp.ActiveUIDocument;
             Document doc = uidoc.Document;
 
-            RoomPickFilter roomPickFilter = new RoomPickFilter();
-            IList<Reference> rooms = uidoc.Selection.PickObjects(ObjectType.Element,roomPickFilter, "Выберите комнаты"); //пользователь выбирает комнаты
-            List<ElementId> roomids = (from Reference r in rooms select r.ElementId).ToList(); //получаем список Id комнат
-
-            var roomTagTypes = new FilteredElementCollector(doc)
-                       .OfCategory(BuiltInCategory.OST_RoomTags)
-                       .OfType<FamilySymbol>()
-                       .FirstOrDefault();
-
-            View view = new FilteredElementCollector(doc) //выбираем вид
-                .OfClass(typeof(View))
-                .OfType<View>()
-                .Where(x => x.Name.Equals("Level 1"))
-                .FirstOrDefault();
-
-            Transaction transaction = new Transaction(doc, "Марки помещений");
-            transaction.Start();
-            foreach (ElementId roomid in roomids)
+            try
             {
-                Element e = doc.GetElement(roomid);
-                Room r = e as Room;
-                XYZ cen = GetElementCenter(r);
-                UV center = new UV(cen.X, cen.Y);
-                doc.Create.NewRoomTag(new LinkElementId(roomid), center, view.Id);
+                RoomPickFilter roomPickFilter = new RoomPickFilter();
+                IList<Reference> rooms = uidoc.Selection.PickObjects(ObjectType.Element, roomPickFilter, "Выберите комнаты"); //пользователь выбирает комнаты
+                List<ElementId> roomids = (from Reference r in rooms select r.ElementId).ToList(); //получаем список Id комнат
+
+                var roomTagTypes = new FilteredElementCollector(doc) //фильтр по маркам комнат
+                           .OfCategory(BuiltInCategory.OST_RoomTags)
+                           .OfType<FamilySymbol>()
+                           .FirstOrDefault();
+
+                View view = new FilteredElementCollector(doc) //выбираем вид
+                    .OfClass(typeof(View))
+                    .OfType<View>()
+                    .Where(x => x.Name.Equals("Level 1"))
+                    .FirstOrDefault();
+
+                Transaction transaction = new Transaction(doc, "Марки помещений");
+                transaction.Start();
+                foreach (ElementId roomid in roomids)
+                {
+                    Element e = doc.GetElement(roomid);
+                    Room r = e as Room;
+                    XYZ cen = GetElementCenter(r);
+                    UV center = new UV(cen.X, cen.Y);
+                    doc.Create.NewRoomTag(new LinkElementId(roomid), center, view.Id);
+                }
+
+                transaction.Commit();
+            }
+            catch (Autodesk.Revit.Exceptions.OperationCanceledException) //исключение esc
+            {
+                return Result.Cancelled; //результат - отмена
+            }
+            catch (Exception ex) //для всех прочих
+            {
+                message = ex.Message; //передаём в Execute сообщение об ошибге, генерируемое Revit
+                return Result.Failed;
             }
 
-            transaction.Commit();
 
             return Result.Succeeded;
         }
